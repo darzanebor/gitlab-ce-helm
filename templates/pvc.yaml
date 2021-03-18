@@ -1,0 +1,30 @@
+{{ if eq .Values.gitlab.persistence.enabled true }}
+{{- $fullName := include "gitlab.fullname" . -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $fullName }}-data
+  labels:
+    {{- include "gitlab.labels" . | nindent 4 }}
+spec:
+  storageClassName: "{{ .Values.gitlab.persistence.storageClassName }}"
+  accessModes:
+    - "{{ .Values.gitlab.persistence.accessModes }}"    
+  resources:
+    requests:
+      storage: "{{ .Values.gitlab.persistence.dataSizeVolume }}"
+---    
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $fullName }}-etc
+  labels:
+    {{- include "gitlab.labels" . | nindent 4 }}
+spec:
+  storageClassName: "{{ .Values.gitlab.persistence.storageClassName }}"
+  accessModes:
+    - "{{ .Values.gitlab.persistence.accessModes }}"    
+  resources:
+    requests:
+      storage: "{{ .Values.gitlab.persistence.backupSizeVolume }}"
+{{ end }}

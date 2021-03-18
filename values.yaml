@@ -1,0 +1,113 @@
+replicaCount: 1
+
+image:
+  repository: gitlab/gitlab-ce
+  pullPolicy: IfNotPresent
+  tag: 13.8.0-ce.0
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name:
+
+podSecurityContext: {}
+
+securityContext: {}
+
+service:
+  type: ClusterIP
+  port: 443
+
+ingress:
+  enabled: true  
+  annotations: {
+    kubernetes.io/tls-acme: "true",
+    cert-manager.io/issuer: "letsencrypt-prod",
+    kubernetes.io/force-ssl-redirect: "false",
+    kubernetes.io/cors-allow-headers: "X-Forwarded-For",
+    kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS":443}]'
+  }  
+  hosts:
+    - host: git.muffs.ru
+      paths: ['/']
+  tls:
+    - hosts:
+      - git.muffs.ru
+      secretName: git-certs
+
+resources:
+  requests:
+    cpu: 1000m
+    memory: 8Gi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+global:
+  redis:
+    enabled: true
+  postgresql:
+    enabled: true
+    postgresqlDatabase: gitlab_production
+    postgresqlUsername: postgres
+    postgresqlPassword: abraAblahabra%^@#
+
+gitlab:
+  persistence: 
+    enabled: true
+    storageClassName: "rook-ceph-block" #default rook-ceph
+    accessModes: ReadWriteOnce
+    backupSizeVolume: 4Gi
+    dataSizeVolume: 10Gi
+    logSizeVolume: 6Gi
+  host:
+    gitlab:  git.muffs.ru
+    registry:
+      host: hub.muffs.ru
+      port: '5005'
+  auth:
+    rootPassword: ''
+    rootEmail: ''
+  smtp: # E-Mail account configuration
+    enabled:      'true'
+    server:      'smtp.yandex.ru'
+    port:        '465'
+    username:    ''
+    password:    ''
+    email_from:  ''
+    domain:      ''
+    auth_type:   'login'
+    tls:         'true'
+    tls_auto:    'true'
+    ssl_verify:  'peer'
+  s3: # S3 bucket configuration for gitlab backups storage default mount point is /mnt/s3
+    enabled: true
+    image: 'alphaceti/s3fuse:latest'
+    bucket_name: 'bucket_name'
+    url: 'https://s3.fr-par.scw.cloud'
+    region: 'fr-par'
+    access_key: ''
+    secret_key: ''
+  config: |
+    #Additional config for gitlab.rb
+    gitlab_rails['object_store']['enabled'] = false
+    gitlab_rails['object_store']['proxy_download'] = true
+    gitlab_rails['object_store']['connection'] = {
+        'provider' => 'AWS',
+        'region' => 'fr-par',
+        'host' => 's3.fr-par.scw.cloud',
+        'bucket' => 'bucket',
+        'aws_access_key_id' => 'key',
+        'aws_secret_access_key' => 'key',
+     }

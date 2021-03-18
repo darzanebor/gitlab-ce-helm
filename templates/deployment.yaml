@@ -1,0 +1,144 @@
+{{- $fullName := include "gitlab.fullname" . -}}
+{{- $svcPort := .Values.service.port -}}
+{{- $relname := .Release.Name -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "gitlab.fullname" . }}
+  labels:
+    {{- include "gitlab.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "gitlab.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "gitlab.selectorLabels" . | nindent 8 }}
+    spec:
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      serviceAccountName: {{ include "gitlab.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{ if .Values.global.postgresql.enabled }}
+      initContainers:
+      - name: check-db-ready
+        image: postgres:12.2-alpine
+        command: ['sh', '-c', 'until pg_isready -h {{ $relname }}-postgresql-headless -p 5432 -U {{ .Values.global.postgresql.postgresqlUsername }}; do echo waiting for database; sleep 2; done;']
+      {{ end }}
+      containers:
+      - name: "s3-mounter"
+        image: "{{ .Values.gitlab.s3.image }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          privileged: true
+          capabilities:
+            add: ["SYS_ADMIN"]
+          allowPrivilegeEscalation: true
+        env:
+        - name: S3_MNT_POINT
+          value: '/mnt/s3'
+        - name: S3_BUCKET
+          value: "{{ .Values.gitlab.s3.bucket_name }}"
+        - name: S3_URL
+          value: "{{ .Values.gitlab.s3.url }}"
+        - name: S3_REGION
+          value: "{{ .Values.gitlab.s3.region }}"
+        - name: S3_KEY
+          value: "{{ .Values.gitlab.s3.access_key }}"
+        - name: S3_SECRET_KEY
+          value: "{{ .Values.gitlab.s3.secret_key }}"
+        volumeMounts:
+          - name: device-fuse
+            mountPath: /dev/fuse
+          - name: gitlab-s3
+            mountPath: /mnt
+            mountPropagation: Bidirectional
+      - name: {{ .Chart.Name }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          privileged: true
+          capabilities:
+            add: ["SYS_ADMIN"]
+          allowPrivilegeEscalation: true
+        env:
+          {{- if .Values.gitlab.auth.rootPassword }}
+          - name: GITLAB_ROOT_PASSWORD
+            value: '{{ .Values.gitlab.auth.rootPassword }}'
+          - name: GITLAB_ROOT_EMAIL
+            value: '{{ .Values.gitlab.auth.rootEmail }}'
+          {{- end }}
+        ports:
+          - name: http
+            containerPort: 8081
+            protocol: TCP
+          - name: ssh
+            containerPort: 22
+            protocol: TCP
+        livenessProbe:
+          tcpSocket:
+            port: http
+          failureThreshold: 5
+          initialDelaySeconds: 1200
+          periodSeconds: 120
+        readinessProbe:
+          tcpSocket:
+            port: http
+          failureThreshold: 5
+          initialDelaySeconds: 1200
+          periodSeconds: 120
+        volumeMounts:
+          - name: gitlab-etc
+            mountPath: /etc/gitlab
+          - name: gitlab-rb
+            mountPath: /etc/gitlab/gitlab.rb
+            subPath: gitlab.rb
+          - name: gitlab-data
+            mountPath: /var/opt/gitlab
+          - name: gitlab-s3
+            mountPath: /mnt
+            mountPropagation: Bidirectional
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: gitlab-rb
+          configMap:
+            name: {{ $fullName }}-config
+      {{ if eq .Values.gitlab.persistence.enabled true }}
+        - name: device-fuse
+          hostPath:
+            path: /dev/fuse
+        - name: gitlab-s3
+          hostPath:
+            path: /var/lib/kubelet/plugins/ru.muffs.s3-bucket
+        - name: gitlab-data
+          persistentVolumeClaim:
+            claimName: {{ $fullName }}-data
+        - name: gitlab-etc
+          persistentVolumeClaim:
+            claimName: {{ $fullName }}-etc
+      {{ else }}
+        - name: gitlab-logs
+          emptyDir: {}
+        - name: gitlab-data
+          emptyDir: {}
+        - name: gitlab-backup
+          emptyDir: {}          
+      {{ end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}

@@ -1,0 +1,22 @@
+{{- $fullName := include "gitlab.fullname" . -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullName }}-config
+  labels:
+    {{- include "gitlab.labels" . | nindent 4 }}
+data:
+  gitlab.rb: |-
+{{ tpl (.Files.Get "conf/gitlab.conf") . | nindent 4 -}}
+{{- if .Values.global.redis.enabled -}}
+{{ tpl (.Files.Get "conf/gitlab-redis.conf") . | nindent 4 -}}
+{{- end -}}
+{{- if .Values.global.postgresql.enabled -}}
+{{ tpl (.Files.Get "conf/gitlab-postgresql.conf") . | nindent 4 -}}
+{{- end -}}
+{{- if .Values.gitlab.smtp.enabled -}}
+{{ tpl (.Files.Get "conf/gitlab-smtp.conf") . | nindent 4 -}}
+{{- end -}}
+{{- if .Values.gitlab.config -}}
+{{ .Values.gitlab.config | nindent 4 }}
+{{ end }}
