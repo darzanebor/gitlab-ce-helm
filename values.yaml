@@ -91,7 +91,7 @@ gitlab:
     tls:         'true'
     tls_auto:    'true'
     ssl_verify:  'peer'
-  s3: # S3 bucket configuration for gitlab backups storage default mount point is /mnt/s3
+  s3: # EXPERIMENTAL SIDECAR - S3 bucket configuration for gitlab backups storage default mount point is /mnt/s3
     enabled: true
     image: 'alphaceti/s3fuse:latest'
     bucket_name: 'bucket_name'
